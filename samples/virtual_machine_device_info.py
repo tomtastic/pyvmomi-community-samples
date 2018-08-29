@@ -19,7 +19,7 @@ import atexit
 import argparse
 import getpass
 
-from pyVim import connect
+from pyVim.connect import SmartConnectNoSSL, Disconnect
 
 # Demonstrates:
 # =============
@@ -204,11 +204,11 @@ def get_args():
 args = get_args()
 
 # form a connection...
-si = connect.SmartConnect(host=args.host, user=args.user, pwd=args.password,
+si = SmartConnectNoSSL(host=args.host, user=args.user, pwd=args.password,
                           port=args.port)
 
 # Note: from daemons use a shutdown hook to do this, not the atexit
-atexit.register(connect.Disconnect, si)
+atexit.register(Disconnect, si)
 
 # http://pubs.vmware.com/vsphere-55/topic/com.vmware.wssdk.apiref.doc/vim.SearchIndex.html
 search_index = si.content.searchIndex
