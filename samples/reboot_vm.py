@@ -12,7 +12,7 @@
 
 import atexit
 
-from pyVim import connect
+from pyVim.connect import SmartConnectNoSSL, Disconnect
 
 from tools import cli
 from tools import tasks
@@ -41,11 +41,11 @@ def setup_args():
 ARGS = setup_args()
 SI = None
 try:
-    SI = connect.SmartConnect(host=ARGS.host,
+    SI = SmartConnectNoSSL(host=ARGS.host,
                               user=ARGS.user,
                               pwd=ARGS.password,
                               port=ARGS.port)
-    atexit.register(connect.Disconnect, SI)
+    atexit.register(Disconnect, SI)
 except IOError as ex:
     pass
 
