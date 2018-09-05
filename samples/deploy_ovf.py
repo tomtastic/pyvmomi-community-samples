@@ -15,7 +15,8 @@ from time import sleep
 from argparse import ArgumentParser
 from getpass import getpass
 
-from pyVim import connect
+#from pyVim import connect
+from pyVim.connect import SmartConnectNoSSL, Disconnect
 from pyVmomi import vim
 
 
@@ -54,6 +55,14 @@ def get_args():
                           wish to use. If omitted, the first\
                           datacenter will be used.')
 
+    parser.add_argument('--folder',
+                        required=False,
+                        action='store',
+                        default=None,
+                        help='Name of the VMFolder you wish\
+                            the VM to be dumped in. If left blank\
+                            The datacenter VM folder will be used')
+
     parser.add_argument('--datastore_name',
                         required=False,
                         action='store',
@@ -69,6 +78,12 @@ def get_args():
                         help='Name of the cluster you wish the VM to\
                           end up on. If left blank the first cluster found\
                           will be used')
+
+    parser.add_argument('-n', '--name',
+                        required=True,
+                        action='store',
+                        default=None,
+                        help='vSphere service to connect to.')
 
     parser.add_argument('-v', '--vmdk_path',
                         required=True,
@@ -104,6 +119,15 @@ def get_ovf_descriptor(ovf_path):
                 print "Could not read file: %s" % ovf_path
                 exit(1)
 
+def get_obj(content, vimtype, name):
+    obj = None
+    container = content.viewManager.CreateContainerView(
+        content.rootFolder, vimtype, True)
+    for c in container.view:
+        if c.name == name:
+            obj = c
+            break
+    return obj
 
 def get_obj_in_list(obj_name, obj_list):
     """
@@ -115,7 +139,6 @@ def get_obj_in_list(obj_name, obj_list):
     print("Unable to find object by the name of %s in list:\n%s" %
           (o.name, map(lambda o: o.name, obj_list)))
     exit(1)
-
 
 def get_objects(si, args):
     """
@@ -153,7 +176,6 @@ def get_objects(si, args):
             "datastore": datastore_obj,
             "resource pool": resource_pool_obj}
 
-
 def keep_lease_alive(lease):
     """
     Keeps the lease alive while POSTing the VMDK.
@@ -175,22 +197,30 @@ def main():
     args = get_args()
     ovfd = get_ovf_descriptor(args.ovf_path)
     try:
-        si = connect.SmartConnect(host=args.host,
+        si = SmartConnectNoSSL(host=args.host,
                                   user=args.user,
                                   pwd=args.password,
                                   port=args.port)
     except:
         print "Unable to connect to %s" % args.host
         exit(1)
+
     objs = get_objects(si, args)
+
+    if (get_obj(si.content, [vim.Folder], args.folder)):
+        argfolder = get_obj(si.content, [vim.Folder], args.folder)
+    else:
+        print("Folder '%s' wasn't found, creating in base folder!" % args.folder)
+        argfolder = objs["datacenter"].vmFolder
+
     manager = si.content.ovfManager
-    spec_params = vim.OvfManager.CreateImportSpecParams()
+    spec_params = vim.OvfManager.CreateImportSpecParams(entityName=args.name)
     import_spec = manager.CreateImportSpec(ovfd,
                                            objs["resource pool"],
                                            objs["datastore"],
                                            spec_params)
     lease = objs["resource pool"].ImportVApp(import_spec.importSpec,
-                                             objs["datacenter"].vmFolder)
+                                             argfolder)
     while(True):
         if (lease.state == vim.HttpNfcLease.State.ready):
             # Assuming single VMDK.
@@ -212,7 +242,7 @@ def main():
         elif (lease.state == vim.HttpNfcLease.State.error):
             print "Lease error: " + lease.state.error
             exit(1)
-    connect.Disconnect(si)
+    Disconnect(si)
 
 if __name__ == "__main__":
     exit(main())
